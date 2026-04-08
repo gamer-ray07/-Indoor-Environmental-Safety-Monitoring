@@ -38,12 +38,12 @@ def live():
     try:
         import serial
 
-        # 🔥 Open port only when needed
+        #  Open port only when needed
         ser = serial.Serial('COM9', 115200, timeout=1)
 
         line = ser.readline().decode(errors='ignore').strip()
 
-        ser.close()  # 🔥 ALWAYS close port
+        ser.close()  #  ALWAYS close port
 
         if "Gas" in line and "Temp" in line:
             parts = line.replace("Gas:", "").replace("Dust:", "").replace("Temp:", "").replace("Humidity:", "").split("|")

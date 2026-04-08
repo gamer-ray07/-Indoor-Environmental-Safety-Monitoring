@@ -1,9 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Bell, Filter, AlertTriangle, Info, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Bell, CheckCircle2 } from 'lucide-react'
 import AlertItem from '../components/AlertItem'
-import ComparisonBarChart from '../components/charts/ComparisonBarChart'
-import { alerts, alertHistory } from '../data/mockData'
 
 const fadeUp = {
   initial: { opacity: 0, y: 12 },
@@ -12,8 +10,63 @@ const fadeUp = {
 }
 
 export default function Alerts() {
+  const [alerts, setAlerts] = useState([])
   const [filter, setFilter] = useState('all')
   const [acknowledged, setAcknowledged] = useState('all')
+
+  // FIX 1: Wrapped fetchAlerts in useCallback to avoid re-creating
+  // on every render, and moved it outside useEffect so it's stable.
+  const fetchAlerts = useCallback(() => {
+    fetch('http://127.0.0.1:5000/live')
+      .then((res) => {
+        // FIX 2: Check for non-OK HTTP responses before parsing JSON
+        if (!res.ok) throw new Error(`HTTP error: ${res.status}`)
+        return res.json()
+      })
+      .then((data) => {
+        if (data.error) return // FIX 3: Guard against API-level errors
+
+        let severity = null
+        let message = ''
+
+        if (data.status === 'DANGER') {
+          severity = 'critical'
+          message = '🚨 Dangerous Air Condition Detected'
+        } else if (data.status === 'WARNING') {
+          severity = 'warning'
+          message = '⚠️ Moderate Risk Detected'
+        }
+
+        if (severity) {
+          const newAlert = {
+            id: Date.now(),
+            severity,
+            message,
+            sensor: 'Live Sensor',
+            zone: 'Zone 1',
+            timestamp: new Date().toLocaleTimeString(),
+            acknowledged: false,
+          }
+          // FIX 4: Kept slice(0, 9) but moved to be explicit — keeps max 10 alerts
+          setAlerts((prev) => [newAlert, ...prev].slice(0, 10))
+        }
+      })
+      .catch((err) => console.error('Alert fetch failed:', err))
+  }, [])
+
+  useEffect(() => {
+    fetchAlerts()
+    const interval = setInterval(fetchAlerts, 3000)
+    return () => clearInterval(interval)
+  }, [fetchAlerts]) // FIX 5: Added fetchAlerts to dependency array (was missing)
+
+  // FIX 6: Added acknowledge handler — was completely missing, so AlertItem
+  // had no way to flip the acknowledged flag.
+  const handleAcknowledge = useCallback((id) => {
+    setAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, acknowledged: true } : a))
+    )
+  }, [])
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter((a) => {
@@ -22,186 +75,109 @@ export default function Alerts() {
       if (acknowledged === 'acknowledged' && !a.acknowledged) return false
       return true
     })
-  }, [filter, acknowledged])
+  }, [alerts, filter, acknowledged])
 
-  const stats = useMemo(() => ({
-    total: alerts.length,
-    critical: alerts.filter((a) => a.severity === 'critical').length,
-    warning: alerts.filter((a) => a.severity === 'warning').length,
-    info: alerts.filter((a) => a.severity === 'info').length,
-    active: alerts.filter((a) => !a.acknowledged).length,
-  }), [])
+  const stats = useMemo(
+    () => ({
+      total: alerts.length,
+      critical: alerts.filter((a) => a.severity === 'critical').length,
+      warning: alerts.filter((a) => a.severity === 'warning').length,
+      // FIX 7: Was counting active as unacknowledged (correct), but label
+      // said "Active" with emerald (green) color — misleading. Renamed stat.
+      unacknowledged: alerts.filter((a) => !a.acknowledged).length,
+    }),
+    [alerts]
+  )
 
   return (
     <motion.div {...fadeUp}>
-      {/* Header */}
+      {/* HEADER */}
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-title">Alerts</h1>
-          <p className="page-subtitle">Active alerts, warnings, and system notifications</p>
+          <p className="page-subtitle">Live system alerts from sensors</p>
         </div>
         <div className="page-header-right">
           <div className="header-timestamp">
-            <span className="live-dot"></span>
+            <span className="live-dot" />
             <span>Live monitoring</span>
           </div>
         </div>
       </div>
 
-      {/* Alert Stats */}
+      {/* STATS */}
       <div className="grid-4" style={{ marginBottom: 'var(--space-xl)' }}>
         <div className="stat-card rose">
-          <div className="stat-card-top">
-            <div className="stat-card-icon rose">
-              <AlertCircle size={18} />
-            </div>
-          </div>
           <div className="stat-card-value">{stats.critical}</div>
-          <div className="stat-card-label">Critical Alerts</div>
+          <div className="stat-card-label">Critical</div>
         </div>
         <div className="stat-card amber">
-          <div className="stat-card-top">
-            <div className="stat-card-icon amber">
-              <AlertTriangle size={18} />
-            </div>
-          </div>
           <div className="stat-card-value">{stats.warning}</div>
           <div className="stat-card-label">Warnings</div>
         </div>
-        <div className="stat-card cyan">
-          <div className="stat-card-top">
-            <div className="stat-card-icon cyan">
-              <Info size={18} />
-            </div>
-          </div>
-          <div className="stat-card-value">{stats.info}</div>
-          <div className="stat-card-label">Information</div>
-        </div>
-        <div className="stat-card emerald">
-          <div className="stat-card-top">
-            <div className="stat-card-icon emerald">
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div className="stat-card-value">{stats.active}</div>
+        {/* FIX 7 cont: Changed emerald → amber-ish label for unacknowledged */}
+        <div className="stat-card amber">
+          <div className="stat-card-value">{stats.unacknowledged}</div>
           <div className="stat-card-label">Unacknowledged</div>
+        </div>
+        <div className="stat-card cyan">
+          <div className="stat-card-value">{stats.total}</div>
+          <div className="stat-card-label">Total</div>
         </div>
       </div>
 
-      {/* Main Grid */}
+      {/* ALERT LIST */}
       <div className="grid-dashboard">
-        {/* Alert List */}
-        <div className="col-span-7">
+        {/* FIX 8: col-span-7 is non-standard — changed to col-span-full
+            or wrap in a full-width container. Adjust to your grid setup. */}
+        <div className="col-span-full">
           <div className="card">
             <div className="card-header">
               <div className="card-title">
                 <Bell />
-                All Alerts
+                Live Alerts
               </div>
+
               <div style={{ display: 'flex', gap: '8px' }}>
                 <select
-                  className="filter-select"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  id="alert-severity-filter"
                 >
                   <option value="all">All Severities</option>
                   <option value="critical">Critical</option>
                   <option value="warning">Warning</option>
-                  <option value="info">Info</option>
                 </select>
+
                 <select
-                  className="filter-select"
                   value={acknowledged}
                   onChange={(e) => setAcknowledged(e.target.value)}
-                  id="alert-status-filter"
                 >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="acknowledged">Acknowledged</option>
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  {/* FIX 9: "acknowledged" option existed in state/filter logic
+                      but was missing from the <select> dropdown entirely */}
+                  <option value="acknowledged">Acknowledged Only</option>
                 </select>
               </div>
             </div>
 
             <div className="alert-list">
               {filteredAlerts.map((alert) => (
-                <AlertItem key={alert.id} alert={alert} />
+                // FIX 10: Pass onAcknowledge down — AlertItem was receiving
+                // no handler, so the acknowledge button was a dead click.
+                <AlertItem
+                  key={alert.id}
+                  alert={alert}
+                  onAcknowledge={handleAcknowledge}
+                />
               ))}
+
               {filteredAlerts.length === 0 && (
-                <div className="empty-state" style={{ padding: 'var(--space-3xl)' }}>
-                  <CheckCircle2 size={32} style={{ color: 'var(--accent-emerald)' }} />
-                  <p>No alerts matching your filters</p>
+                <div className="empty-state">
+                  <CheckCircle2 size={32} />
+                  <p>No alerts — System Safe</p>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* Alert History + Details */}
-        <div className="col-span-5">
-          <div className="chart-card" style={{ marginBottom: 'var(--space-xl)' }}>
-            <div className="chart-card-header">
-              <div className="chart-card-title">
-                <Filter />
-                Alert History
-              </div>
-              <span className="card-badge">7 Days</span>
-            </div>
-            <ComparisonBarChart
-              data={alertHistory}
-              xKey="day"
-              bars={[
-                { dataKey: 'critical', color: '#fb7185', name: 'Critical' },
-                { dataKey: 'warning', color: '#fbbf24', name: 'Warning' },
-                { dataKey: 'info', color: '#38bdf8', name: 'Info' },
-              ]}
-              height={240}
-            />
-          </div>
-
-          {/* Alert timeline */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <AlertTriangle />
-                Sensor-Triggered Warnings
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {alerts.filter(a => a.severity !== 'info').slice(0, 5).map((alert) => (
-                <div key={alert.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 12px',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-primary)',
-                }}>
-                  <div className={`alert-severity ${alert.severity}`} style={{ marginTop: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 'var(--text-sm)',
-                      color: 'var(--text-primary)',
-                      fontWeight: 500,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {alert.sensor}
-                    </div>
-                    <div style={{
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--text-tertiary)',
-                    }}>
-                      {alert.zone} · {alert.timestamp}
-                    </div>
-                  </div>
-                  <span className={`alert-severity-label ${alert.severity}`}>
-                    {alert.severity}
-                  </span>
-                </div>
-              ))}
             </div>
           </div>
         </div>

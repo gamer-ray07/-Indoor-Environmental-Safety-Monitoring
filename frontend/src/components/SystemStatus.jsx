@@ -2,7 +2,8 @@ import { memo } from 'react'
 import { Shield, ShieldAlert, CheckCircle, XCircle } from 'lucide-react'
 
 const SystemStatus = memo(function SystemStatus({ systemStatus }) {
-  const isSafe = systemStatus.status === 'safe'
+ const status = systemStatus?.status || 'safe'
+const isSafe = status === 'safe'
 
   return (
     <div className={`system-status ${isSafe ? 'safe' : 'unsafe'}`} id="system-status">
@@ -13,11 +14,16 @@ const SystemStatus = memo(function SystemStatus({ systemStatus }) {
       </div>
 
       <div className={`status-label ${isSafe ? 'safe' : 'unsafe'}`}>
-        {isSafe ? 'SAFE' : 'UNSAFE'}
+        {status.toUpperCase()}
       </div>
 
       <div className="status-detail">
-        System score: {systemStatus.score}/100
+        System score: {systemStatus.score || systemStatus.risk_score || 50}/100
+        <div style={{ fontSize: "12px", marginTop: "6px" }}>
+  {status === "danger" && "🚨 Dangerous Condition"}
+  {status === "warning" && "⚠️ Warning Level"}
+  {status === "safe" && "✅ Safe"}
+</div>
       </div>
 
       <div style={{

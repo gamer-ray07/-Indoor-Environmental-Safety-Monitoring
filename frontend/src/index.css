@@ -1435,3 +1435,8 @@ img {
   height: 8px;
   border-radius: var(--radius-full);
 }
+@keyframes blink {
+  50% {
+    opacity: 0.6;
+  }
+}
