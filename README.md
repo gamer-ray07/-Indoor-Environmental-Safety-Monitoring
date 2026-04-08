@@ -16,6 +16,16 @@ It uses sensors to collect live data, processes it using a trained ML model, and
 - 🔊 Sound alerts for critical situations
 - 📈 Trend visualization (Gas, Dust, Temperature, Humidity)
 - 🧠 Prediction tracking over time
+- 🏭 Use Cases
+Factories
+Laboratories
+Indoor air quality monitoring
+Safety systems
+📌 Future Improvements
+Real relay hardware control
+SMS/Email alert integration
+Cloud deployment
+Advanced ML models
 
 ---
 
